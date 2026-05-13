@@ -84,8 +84,17 @@ class BaseWebSocketClient:
             payload = json.loads(raw)
         except json.JSONDecodeError:
             return raw
-        if isinstance(payload, dict) and payload.get("event") == "ping" and payload.get("time") is not None:
-            self.send_json({"event": "pong", "time": payload["time"]})
+        # WEEX server sends ping frames with `"type": "ping"` (not `"event": "ping"`).
+        # Accept both field names so we don't silently miss heartbeats; reply using the
+        # same key the server used to keep the payload symmetric.
+        is_ping = (
+            isinstance(payload, dict)
+            and payload.get("time") is not None
+            and (payload.get("type") == "ping" or payload.get("event") == "ping")
+        )
+        if is_ping:
+            pong_key = "type" if payload.get("type") == "ping" else "event"
+            self.send_json({pong_key: "pong", "time": payload["time"]})
         return payload
 
     def subscribe_channel(self, channel: str) -> None:
